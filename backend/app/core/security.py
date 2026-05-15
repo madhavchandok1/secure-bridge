@@ -1,36 +1,12 @@
-from datetime import datetime, timedelta, timezone
-
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
-from jose import JWTError, jwt
 import secrets
 
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+
+from cryptography.fernet import Fernet
+
 from app.config import settings
-
-password_hasher = PasswordHasher()
-
-
-def hash_value(value: str) -> str:
-    """
-    Hashes sensitive values using Argon2id.
-    """
-
-    return password_hasher.hash(value)
-
-
-def verify_hash(value: str, hashed_value: str) -> bool:
-    """
-    Verifies Argon2id hash.
-    """
-
-    try:
-        return password_hasher.verify(
-            hashed_value,
-            value,
-        )
-
-    except VerifyMismatchError:
-        return False
 
 
 def create_access_token(data: dict) -> str:
@@ -79,3 +55,29 @@ def generate_secure_token(length: int = 32) -> str:
     """
 
     return secrets.token_urlsafe(length)
+
+
+def generate_invite_key(prefix: str = "SBR") -> str:
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789"
+
+    parts = []
+
+    for _ in range(3):
+        segment = "".join(secrets.choice(alphabet) for _ in range(4))
+        parts.append(segment)
+    
+    return f"{prefix}-{'-'.join(parts)}"
+
+
+fernet = Fernet(key=settings.FERNET_SECRET_KEY.encode())
+
+def encrypt_invite_key(invite_key: str) -> str:
+    encrypted = fernet.encrypt(data=invite_key.encode())
+
+    return encrypted.decode()
+
+
+def decrypt_invite_key(encrypted_invite_key: str) -> str:
+    decrypted = fernet.decrypt(token=encrypted_invite_key.encode())
+
+    return decrypted.decode()

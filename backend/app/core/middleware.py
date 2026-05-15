@@ -1,8 +1,45 @@
 import hashlib
+import logging
 import uuid
 
 from fastapi import Request
+from starlette.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger(__name__)
+
+
+class GlobalExceptionMiddleware(BaseHTTPMiddleware):
+    """
+    Logs unhandled exceptions and returns a stable error response.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception:
+            request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+
+            logger.exception(
+                "Unhandled exception",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "client_ip": getattr(request.state, "client_ip", "unknown"),
+                },
+            )
+
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": "Internal server error",
+                    "request_id": request_id,
+                },
+                headers={
+                    "X-Request-ID": request_id,
+                },
+            )
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """

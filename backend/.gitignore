@@ -2,36 +2,52 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+.Python
 
 # Virtual Environment
 .venv/
 venv/
 env/
+ENV/
 
 # Environment Files
 .env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
 .idea/
+*.code-workspace
 
 # OS Files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+.tox/
+.nox/
 
-# Ruff
+# Type Checking / Linting
 .ruff_cache/
+.mypy_cache/
+.pyre/
 
 # Alembic
 migrations/versions/*.pyc
+migrations/versions/__pycache__/
 
 # Logs
 *.log
+logs/
 
 # Docker
 *.pid
@@ -40,9 +56,13 @@ migrations/versions/*.pyc
 build/
 dist/
 *.egg-info/
+.eggs/
+pip-wheel-metadata/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# mypy
-.mypy_cache/
+# Local temp files
+*.tmp
+*.temp
+~$*

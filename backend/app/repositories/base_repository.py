@@ -40,7 +40,7 @@ class BaseRepository(Generic[ModelType]):
 
         db.add(entity)
 
-        await db.commit()
+        await db.flush()
 
         await db.refresh(entity)
 
@@ -51,7 +51,7 @@ class BaseRepository(Generic[ModelType]):
         for field, value in data.items():
             setattr(entity, field, value)
 
-        await db.commit()
+        await db.flush()
 
         await db.refresh(entity)
 
@@ -61,4 +61,4 @@ class BaseRepository(Generic[ModelType]):
     async def hard_delete(self, db: AsyncSession, entity: ModelType) -> None:
         await db.delete(entity)
 
-        await db.commit()
+        await db.flush()

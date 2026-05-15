@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
-from app.core.middleware import RequestContextMiddleware
+from app.core.middleware import GlobalExceptionMiddleware, RequestContextMiddleware
 from app.config import settings
 
 
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
 
+    application.add_middleware(GlobalExceptionMiddleware)
     application.add_middleware(RequestContextMiddleware)
 
     application.add_middleware(

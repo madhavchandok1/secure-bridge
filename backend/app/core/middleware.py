@@ -3,23 +3,33 @@ import logging
 import uuid
 
 from fastapi import Request
-from starlette.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+# Configure logging for the middleware domain
 logger = logging.getLogger(__name__)
 
 
 class GlobalExceptionMiddleware(BaseHTTPMiddleware):
     """
-    Logs unhandled exceptions and returns a stable error response.
-    """
+    Middleware that catches unhandled exceptions across the entire request lifecycle.
 
+    It ensures the API never leaks raw Python stack traces to the client. Instead,
+    it logs the full error context internally and returns a sanitized JSON response
+    with a tracking ID for debugging.
+    """
+    # TODO: LOG THE UNEXCEPTED ERROR TO DEBUG AND TRACE
+    
     async def dispatch(self, request: Request, call_next):
         try:
             return await call_next(request)
+        
         except Exception:
+            # Retrieve request_id from state if available, otherwise generate a fallback
             request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
 
+            # Log the full stack trace with structured metadata for log aggregation
             logger.exception(
                 "Unhandled exception",
                 extra={
@@ -29,7 +39,8 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
                     "client_ip": getattr(request.state, "client_ip", "unknown"),
                 },
             )
-
+            
+            # Return a generic 500 error to the client to maintain security
             return JSONResponse(
                 status_code=500,
                 content={
@@ -43,17 +54,30 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """
-    Injects request metadata into request state.
+    Middleware responsible for extracting and attaching request metadata to the state.
+
+    It handles request identification (UUID), IP extraction (considering proxies),
+    and device fingerprinting. This data is then available to all downstream 
+    handlers and services via 'request.state'.
     """
 
     @staticmethod
     def extract_client_ip(request: Request) -> str:
         """
-        Extract real client IP address.
+        Retrieves the real client IP, prioritizing headers set by reverse proxies.
+
+        Args:
+            request: The incoming Starlette/FastAPI request.
+
+        Returns:
+            str: The detected IP address or 'unknown'.
         """
-        forwarded_for = request.headers.get("X-Forwareded-For")
+
+        # Common header used by Load Balancers (like Nginx/AWS) to pass the original IP
+        forwarded_for = request.headers.get("X-Forwarded-For")
 
         if forwarded_for:
+            # The first IP in the list is the original client
             return forwarded_for.split(",")[0].strip()
         
         if request.client:
@@ -65,23 +89,30 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def build_device_fingerpint(ip_address: str, user_agent: str, accept_langauge: str) -> str:
         """
-        Builds stable device fingerprint
+        Generates a SHA-256 hash representing a unique combination of request headers.
+
+        This fingerprint can be used for basic session tracking, rate limiting, 
+        or detecting suspicious behavior without relying solely on cookies.
         """
 
         fingerprint_source = (f"{ip_address}:{user_agent}:{accept_langauge}")
-
         return hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
     
 
     async def dispatch(self, request: Request, call_next):
+        """
+        Processes the request to inject context and signs the outgoing response.
+        """
+
+        # Assign a unique ID to this request for end-to-end tracing
         request.state.request_id = str(uuid.uuid4())
 
+        # Collect client metadata
         client_ip = self.extract_client_ip(request=request)
-
         user_agent = request.headers.get(key="User-Agent", default="unknown")
-
         accept_language = request.headers.get("Accept-Language", "unknown")
 
+        # Create a stable fingerprint for this specific client/device
         device_fingerprint = (
             self.build_device_fingerpint(
                 ip_address=client_ip,
@@ -90,12 +121,15 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             )
         )
 
+        # Attach metadata to request state for use in routes and services
         request.state.client_ip = client_ip
         request.state.user_agent = user_agent
         request.state.device_fingerprint = (device_fingerprint)
-
+        
+        # Proceed with the request chain
         response = await call_next(request)
 
+        # Add the tracking ID to the response headers for client-side logging
         response.headers["X-Request-ID"] = request.state.request_id
 
         return response
